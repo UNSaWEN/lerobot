@@ -1,0 +1,147 @@
+# Copyright 2025 UNSaWEN. All rights reserved.
+#
+# LeRobot Dockerfile for NVIDIA Orin (JetPack 6 / L4T r36.4.0)
+# 基于 dustynv/lerobot 镜像，安装最新版 lerobot 源码 + 自定义 SO101 样例
+#
+# 构建:
+#   docker build --network=host -f docker/Dockerfile.orin -t lerobot-orin .
+#
+# 运行 (遥操作):
+#   docker run -it --rm \
+#     --runtime=nvidia \
+#     --network=host \
+#     --device=/dev/ttyACM0 \
+#     --device=/dev/ttyACM1 \
+#     --device=/dev/video0 \
+#     -v /tmp/.X11-unix:/tmp/.X11-unix \
+#     -e DISPLAY=$DISPLAY \
+#     -v $(pwd)/SO101:/opt/lerobot/SO101 \
+#     -v ~/.cache/huggingface:/data/models/huggingface \
+#     lerobot-orin
+#
+# 运行 (GPU 推理):
+#   docker run -it --rm \
+#     --runtime=nvidia \
+#     --network=host \
+#     -v ~/.cache/huggingface:/data/models/huggingface \
+#     lerobot-orin python -c "import torch; print(torch.cuda.is_available())"
+
+# 使用 dustynv 的 lerobot 镜像作为基础
+# 该镜像已针对 Jetson Orin 优化，包含:
+# - CUDA 12.8
+# - PyTorch (Jetson 优化版)
+# - 系统级依赖 (OpenCV, ffmpeg 等)
+FROM dustynv/lerobot:r36.4.0-cu128-24.04
+
+# 设置工作目录
+WORKDIR /opt/lerobot
+
+# 环境变量
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    MUJOCO_GL=egl \
+    DIFFUSERS_FORCE_DISABLE_TRITON=1
+
+# 安装额外的系统依赖
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libusb-1.0-0-dev \
+    usbutils \
+    speech-dispatcher \
+    espeak \
+    ffmpeg \
+    v4l-utils \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 升级 lerobot 到工作区最新版本 (v0.4.4)
+# 基础镜像自带的是 v0.1.0，API 已完全重构
+# ============================================================
+
+# 先删除旧版 lerobot 源码 (保留 PyTorch 等重量级依赖)
+RUN rm -rf /opt/lerobot/lerobot
+
+# 复制新版源码和项目配置
+COPY src/lerobot/ /opt/lerobot/src/lerobot/
+COPY pyproject.toml /opt/lerobot/pyproject.toml
+COPY MANIFEST.in /opt/lerobot/MANIFEST.in
+COPY README.md /opt/lerobot/README.md
+
+# 修补 pyproject.toml: 添加 [tool.setuptools.dynamic] 来解析 dynamic readme
+# (setuptools 79.x 不自动发现 README.md，需要显式配置)
+RUN sed -i '/^\[tool\.setuptools\.packages\.find\]/i \
+[tool.setuptools.dynamic]\nreadme = {file = "README.md"}\n' pyproject.toml
+
+# 安装新版 lerobot 及其依赖 (含 feetech 和 phone 扩展)
+# --no-build-isolation: 复用已安装的 PyTorch 等重量级包
+# --extra-index-url: 添加标准 PyPI 作为 Jetson 索引的备用源
+RUN pip install --no-cache-dir -e ".[feetech,phone]" \
+    --no-build-isolation \
+    --extra-index-url https://pypi.org/simple/
+
+# 复制自定义样例代码
+COPY examples/phone_to_so101/ /opt/lerobot/examples/phone_to_so101/
+COPY examples/so101_to_so101_EE/ /opt/lerobot/examples/so101_to_so101_EE/
+
+# 将 examples 目录添加到 Python 路径 (确保自定义处理器可导入)
+ENV PYTHONPATH="/opt/lerobot/examples:/opt/lerobot/src:${PYTHONPATH}"
+
+# 创建数据和模型缓存目录
+RUN mkdir -p /data/models/huggingface /data/datasets \
+    && ln -sf /data/models/huggingface /root/.cache/huggingface 2>/dev/null || true
+
+# 健康检查 - 验证 GPU 和 LeRobot 可用
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import torch; import lerobot; assert torch.cuda.is_available(), 'CUDA not available'" || exit 1
+
+# 默认命令
+CMD ["/bin/bash"]
+
+# ============================================================
+# 使用说明
+# ============================================================
+#
+# 1. 构建镜像 (需要 --network=host 解决 Jetson iptables 问题):
+#    cd /home/abc7535/workspaces/lerobot
+#    docker build --network=host -f docker/Dockerfile.orin -t lerobot-orin .
+#
+# 2. 测试 GPU:
+#    docker run --rm --runtime=nvidia --network=host lerobot-orin \
+#      python3 -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0)}')"
+#
+# 3. 测试 LeRobot:
+#    docker run --rm --runtime=nvidia --network=host lerobot-orin \
+#      python3 -c "import lerobot; print(lerobot.__version__)"
+#
+# 4. 手机遥操作 SO101:
+#    docker run -it --rm \
+#      --runtime=nvidia \
+#      --network=host \
+#      --device=/dev/ttyACM0 \
+#      -v $(pwd)/SO101:/opt/lerobot/SO101 \
+#      lerobot-orin \
+#      python3 examples/phone_to_so101/teleoperate.py
+#
+# 5. 主臂遥操作 SO101:
+#    docker run -it --rm \
+#      --runtime=nvidia \
+#      --network=host \
+#      --device=/dev/ttyACM0 \
+#      --device=/dev/ttyACM1 \
+#      -v $(pwd)/SO101:/opt/lerobot/SO101 \
+#      lerobot-orin \
+#      python3 examples/so101_to_so101_EE/teleoperate.py
+#
+# 6. 策略推理:
+#    docker run -it --rm \
+#      --runtime=nvidia \
+#      --network=host \
+#      --device=/dev/ttyACM0 \
+#      --device=/dev/video0 \
+#      -v $(pwd)/SO101:/opt/lerobot/SO101 \
+#      -v ~/.cache/huggingface:/data/models/huggingface \
+#      lerobot-orin \
+#      python3 examples/phone_to_so101/evaluate.py
+#
+# ============================================================
