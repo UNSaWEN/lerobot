@@ -14,21 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-SO101 Data Replay (End-Effector Space)
-
-从 HuggingFace 数据集回放录制的动作数据。
-数据集中的末端执行器动作通过逆向运动学转换为关节位置。
-
-用法:
-    python examples/so101_to_so101_EE/replay.py
-
-配置说明:
-    - FOLLOWER_PORT: 从臂串口路径
-    - EPISODE_IDX: 要回放的回合索引
-    - HF_REPO_ID: HuggingFace 数据集仓库 ID
-"""
-
 import time
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -46,20 +31,11 @@ from lerobot.utils.constants import ACTION
 from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.utils import log_say
 
-# ==================== 配置参数 ====================
-# 串口配置 (根据实际硬件修改)
-FOLLOWER_PORT = "/dev/ttyACM0"  # SO101 从臂串口
-
-# 机器人 ID
-FOLLOWER_ID = "so101_follower"
-
-# URDF 路径
-URDF_PATH = "./SO101/so101_new_calib.urdf"
-
-# 回放参数
 EPISODE_IDX = 0
 HF_REPO_ID = "<hf_username>/<dataset_repo_id>"
-# =================================================
+FOLLOWER_PORT = "/dev/ttyACM0"
+FOLLOWER_ID = "so101_follower"
+URDF_PATH = "./SO101/so101_new_calib.urdf"
 
 
 def main():
@@ -101,16 +77,12 @@ def main():
     # Connect to the robot
     robot.connect()
 
-    if not robot.is_connected:
-        raise ValueError("Robot is not connected!")
-
-    print("Starting replay loop...")
-    print(f"  Follower: {FOLLOWER_PORT} ({FOLLOWER_ID})")
-    print(f"  Episode: {EPISODE_IDX}")
-    print(f"  Frames: {len(episode_frames)}")
-
-    log_say(f"Replaying episode {EPISODE_IDX}")
     try:
+        if not robot.is_connected:
+            raise ValueError("Robot is not connected!")
+
+        print("Starting replay loop...")
+        log_say(f"Replaying episode {EPISODE_IDX}")
         for idx in range(len(episode_frames)):
             t0 = time.perf_counter()
 
@@ -129,12 +101,9 @@ def main():
             _ = robot.send_action(joint_action)
 
             precise_sleep(max(1.0 / dataset.fps - (time.perf_counter() - t0), 0.0))
-
-    except KeyboardInterrupt:
-        print("\nStopping replay...")
     finally:
+        # Clean up
         robot.disconnect()
-        print("Disconnected.")
 
 
 if __name__ == "__main__":

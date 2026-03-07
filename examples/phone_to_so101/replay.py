@@ -14,12 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-SO101 数据集回放示例
-
-此脚本回放已录制的数据集，让 SO101 机械臂重现录制的动作。
-"""
-
 import time
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -37,42 +31,28 @@ from lerobot.utils.constants import ACTION
 from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.utils import log_say
 
-# ============== 配置参数 ==============
-
-# 回放参数
 EPISODE_IDX = 0
 HF_REPO_ID = "<hf_username>/<dataset_repo_id>"
-
-# 机器人配置
 ROBOT_PORT = "/dev/ttyACM0"
-ROBOT_ID = "R_follower_arm"
-
-# URDF 文件路径
+ROBOT_ID = "so101_follower"
 URDF_PATH = "./SO101/so101_new_calib.urdf"
-
-# ======================================
 
 
 def main():
-    # 创建机器人配置
     robot_config = SO101FollowerConfig(
-        port=ROBOT_PORT,
-        id=ROBOT_ID,
-        use_degrees=True
+        port=ROBOT_PORT, id=ROBOT_ID, use_degrees=True
     )
-
-    # 初始化机器人
     robot = SO101Follower(robot_config)
 
-    # 创建运动学求解器
+    # NOTE: It is highly recommended to use the urdf in the SO-ARM100 repo:
+    # https://github.com/TheRobotStudio/SO-ARM100/blob/main/Simulation/SO101/so101_new_calib.urdf
     kinematics_solver = RobotKinematics(
         urdf_path=URDF_PATH,
         target_frame_name="gripper_frame_link",
         joint_names=list(robot.bus.motors.keys()),
     )
 
-    # 构建管道: 末端执行器动作 -> 关节动作
-    # 注意: 回放使用开环控制 (initial_guess_current_joints=False)
+    # Build pipeline to convert EE action to joints action
     robot_ee_to_joints_processor = RobotProcessorPipeline[
         tuple[RobotAction, RobotObservation], RobotAction
     ](
@@ -80,62 +60,49 @@ def main():
             InverseKinematicsEEToJoints(
                 kinematics=kinematics_solver,
                 motor_names=list(robot.bus.motors.keys()),
-                initial_guess_current_joints=False,  # 开环控制
+                initial_guess_current_joints=False,  # Because replay is open loop
             ),
         ],
         to_transition=robot_action_observation_to_transition,
         to_output=transition_to_robot_action,
     )
 
-    # 加载数据集
+    # Fetch the dataset to replay
     dataset = LeRobotDataset(HF_REPO_ID, episodes=[EPISODE_IDX])
-    # 过滤出指定 episode 的帧
+    # Filter dataset to only include frames from the specified episode since episodes are chunked in dataset V3.0
     episode_frames = dataset.hf_dataset.filter(lambda x: x["episode_index"] == EPISODE_IDX)
     actions = episode_frames.select_columns(ACTION)
 
-    # 连接机器人
     robot.connect()
 
-    if not robot.is_connected:
-        raise ValueError("Robot is not connected!")
-
-    print("=" * 60)
-    print("SO101 数据回放已启动")
-    print("=" * 60)
-    print(f"回放 episode: {EPISODE_IDX}")
-    print(f"帧数: {len(episode_frames)}")
-    print(f"FPS: {dataset.fps}")
-    print("=" * 60)
-
-    log_say(f"Replaying episode {EPISODE_IDX}")
-
     try:
+        if not robot.is_connected:
+            raise ValueError("Robot is not connected!")
+
+        print("Starting replay loop...")
+        log_say(f"Replaying episode {EPISODE_IDX}")
         for idx in range(len(episode_frames)):
             t0 = time.perf_counter()
 
-            # 从数据集获取录制的动作
+            # Get recorded action from dataset
             ee_action = {
                 name: float(actions[idx][ACTION][i])
                 for i, name in enumerate(dataset.features[ACTION]["names"])
             }
 
-            # 获取机器人当前状态
+            # Get robot observation
             robot_obs = robot.get_observation()
 
-            # 末端执行器动作 -> 关节动作
+            # Dataset EE -> robot joints
             joint_action = robot_ee_to_joints_processor((ee_action, robot_obs))
 
-            # 发送动作到机器人
+            # Send action to robot
             _ = robot.send_action(joint_action)
 
-            # 控制循环频率
             precise_sleep(max(1.0 / dataset.fps - (time.perf_counter() - t0), 0.0))
-
-    except KeyboardInterrupt:
-        print("\n回放被中断")
     finally:
+        # Clean up
         robot.disconnect()
-        print("回放完成")
 
 
 if __name__ == "__main__":
