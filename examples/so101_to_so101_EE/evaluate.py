@@ -14,21 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-SO101 Policy Evaluation (End-Effector Space)
-
-加载训练好的策略模型，在 SO101 从臂上运行推理并录制评估数据。
-
-用法:
-    python examples/so101_to_so101_EE/evaluate.py
-
-配置说明:
-    - FOLLOWER_PORT: 从臂串口路径
-    - HF_MODEL_ID: HuggingFace 模型仓库 ID
-    - HF_DATASET_ID: HuggingFace 评估数据集仓库 ID
-    - NUM_EPISODES: 评估的回合数
-"""
-
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -59,36 +44,19 @@ from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import log_say
 from lerobot.utils.visualization_utils import init_rerun
 
-# ==================== 配置参数 ====================
-# 串口配置 (根据实际硬件修改)
-FOLLOWER_PORT = "/dev/ttyACM0"  # SO101 从臂串口
-
-# 机器人 ID
-FOLLOWER_ID = "so101_follower"
-
-# URDF 路径
-URDF_PATH = "./SO101/so101_new_calib.urdf"
-
-# 摄像头配置
-CAMERA_INDEX = 0
-CAMERA_WIDTH = 640
-CAMERA_HEIGHT = 480
-
-# 评估参数
 NUM_EPISODES = 5
 FPS = 30
 EPISODE_TIME_SEC = 60
 TASK_DESCRIPTION = "My task description"
 HF_MODEL_ID = "<hf_username>/<model_repo_id>"
 HF_DATASET_ID = "<hf_username>/<dataset_repo_id>"
-# =================================================
+FOLLOWER_PORT = "/dev/ttyACM0"
+FOLLOWER_ID = "so101_follower"
+URDF_PATH = "./SO101/so101_new_calib.urdf"
 
 
 def main():
-    # Create the robot configuration & robot
-    camera_config = {"front": OpenCVCameraConfig(
-        index_or_path=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT, fps=FPS
-    )}
+    camera_config = {"front": OpenCVCameraConfig(index_or_path=0, width=640, height=480, fps=FPS)}
     robot_config = SO101FollowerConfig(
         port=FOLLOWER_PORT,
         id=FOLLOWER_ID,
@@ -166,53 +134,31 @@ def main():
         policy_cfg=policy,
         pretrained_path=HF_MODEL_ID,
         dataset_stats=dataset.meta.stats,
-        # The inference device is automatically set to match the detected hardware
+        # The inference device is automatically set to match the detected hardware, overriding any previous device settings from training to ensure compatibility.
         preprocessor_overrides={"device_processor": {"device": str(policy.config.device)}},
     )
 
-    # Connect the robot and teleoperator
     robot.connect()
-
-    # Initialize the keyboard listener and rerun visualization
     listener, events = init_keyboard_listener()
-    init_rerun(session_name="so101_evaluate")
+    init_rerun(session_name="so101_so101_EE_evaluate")
 
-    if not robot.is_connected:
-        raise ValueError("Robot is not connected!")
+    try:
+        if not robot.is_connected:
+            raise ValueError("Robot is not connected!")
 
-    print("Starting evaluate loop...")
-    print(f"  Follower: {FOLLOWER_PORT} ({FOLLOWER_ID})")
-    print(f"  Model: {HF_MODEL_ID}")
-    print(f"  Episodes: {NUM_EPISODES}")
+        print("Starting evaluate loop...")
+        for episode_idx in range(NUM_EPISODES):
+            log_say(f"Running inference, recording eval episode {episode_idx + 1} of {NUM_EPISODES}")
 
-    episode_idx = 0
-    for episode_idx in range(NUM_EPISODES):
-        log_say(f"Running inference, recording eval episode {episode_idx + 1} of {NUM_EPISODES}")
-
-        # Main record loop
-        record_loop(
-            robot=robot,
-            events=events,
-            fps=FPS,
-            policy=policy,
-            preprocessor=preprocessor,  # Pass the pre and post policy processors
-            postprocessor=postprocessor,
-            dataset=dataset,
-            control_time_s=EPISODE_TIME_SEC,
-            single_task=TASK_DESCRIPTION,
-            display_data=True,
-            teleop_action_processor=make_default_teleop_action_processor(),
-            robot_action_processor=robot_ee_to_joints_processor,
-            robot_observation_processor=robot_joints_to_ee_pose_processor,
-        )
-
-        # Reset the environment if not stopping or re-recording
-        if not events["stop_recording"] and ((episode_idx < NUM_EPISODES - 1) or events["rerecord_episode"]):
-            log_say("Reset the environment")
+            # Main record loop
             record_loop(
                 robot=robot,
                 events=events,
                 fps=FPS,
+                policy=policy,
+                preprocessor=preprocessor,
+                postprocessor=postprocessor,
+                dataset=dataset,
                 control_time_s=EPISODE_TIME_SEC,
                 single_task=TASK_DESCRIPTION,
                 display_data=True,
@@ -221,24 +167,40 @@ def main():
                 robot_observation_processor=robot_joints_to_ee_pose_processor,
             )
 
-        if events["rerecord_episode"]:
-            log_say("Re-record episode")
-            events["rerecord_episode"] = False
-            events["exit_early"] = False
-            dataset.clear_episode_buffer()
-            continue
+            # Reset the environment if not stopping or re-recording
+            if not events["stop_recording"] and (
+                (episode_idx < NUM_EPISODES - 1) or events["rerecord_episode"]
+            ):
+                log_say("Reset the environment")
+                record_loop(
+                    robot=robot,
+                    events=events,
+                    fps=FPS,
+                    control_time_s=EPISODE_TIME_SEC,
+                    single_task=TASK_DESCRIPTION,
+                    display_data=True,
+                    teleop_action_processor=make_default_teleop_action_processor(),
+                    robot_action_processor=robot_ee_to_joints_processor,
+                    robot_observation_processor=robot_joints_to_ee_pose_processor,
+                )
 
-        # Save episode
-        dataset.save_episode()
-        episode_idx += 1
+            if events["rerecord_episode"]:
+                log_say("Re-record episode")
+                events["rerecord_episode"] = False
+                events["exit_early"] = False
+                dataset.clear_episode_buffer()
+                continue
 
-    # Clean up
-    log_say("Stop recording")
-    robot.disconnect()
-    listener.stop()
+            # Save episode
+            dataset.save_episode()
+    finally:
+        # Clean up
+        log_say("Stop recording")
+        robot.disconnect()
+        listener.stop()
 
-    dataset.finalize()
-    dataset.push_to_hub()
+        dataset.finalize()
+        dataset.push_to_hub()
 
 
 if __name__ == "__main__":

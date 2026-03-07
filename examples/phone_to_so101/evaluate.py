@@ -14,12 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-SO101 策略评估示例
-
-此脚本使用训练好的策略控制 SO101 机械臂并评估其性能。
-"""
-
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -50,64 +44,39 @@ from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import log_say
 from lerobot.utils.visualization_utils import init_rerun
 
-# ============== 配置参数 ==============
-
-# 评估参数
 NUM_EPISODES = 5
 FPS = 30
 EPISODE_TIME_SEC = 60
 TASK_DESCRIPTION = "My task description"
 HF_MODEL_ID = "<hf_username>/<model_repo_id>"
 HF_DATASET_ID = "<hf_username>/<dataset_repo_id>"
-
-# 机器人配置
 ROBOT_PORT = "/dev/ttyACM0"
-ROBOT_ID = "R_follower_arm"
-
-# 相机配置
-CAMERA_INDEX = 0
-CAMERA_WIDTH = 640
-CAMERA_HEIGHT = 480
-
-# URDF 文件路径
+ROBOT_ID = "so101_follower"
 URDF_PATH = "./SO101/so101_new_calib.urdf"
-
-# ======================================
 
 
 def main():
-    # 创建相机配置
-    camera_config = {
-        "front": OpenCVCameraConfig(
-            index_or_path=CAMERA_INDEX,
-            width=CAMERA_WIDTH,
-            height=CAMERA_HEIGHT,
-            fps=FPS
-        )
-    }
-
-    # 创建机器人配置
+    camera_config = {"front": OpenCVCameraConfig(index_or_path=0, width=640, height=480, fps=FPS)}
     robot_config = SO101FollowerConfig(
         port=ROBOT_PORT,
         id=ROBOT_ID,
         cameras=camera_config,
         use_degrees=True,
     )
-
-    # 初始化机器人
     robot = SO101Follower(robot_config)
 
-    # 加载策略
+    # Create policy
     policy = ACTPolicy.from_pretrained(HF_MODEL_ID)
 
-    # 创建运动学求解器
+    # NOTE: It is highly recommended to use the urdf in the SO-ARM100 repo:
+    # https://github.com/TheRobotStudio/SO-ARM100/blob/main/Simulation/SO101/so101_new_calib.urdf
     kinematics_solver = RobotKinematics(
         urdf_path=URDF_PATH,
         target_frame_name="gripper_frame_link",
         joint_names=list(robot.bus.motors.keys()),
     )
 
-    # 构建管道: 末端执行器动作 -> 关节动作
+    # Build pipeline to convert EE action to joints action
     robot_ee_to_joints_processor = RobotProcessorPipeline[
         tuple[RobotAction, RobotObservation], RobotAction
     ](
@@ -122,19 +91,18 @@ def main():
         to_output=transition_to_robot_action,
     )
 
-    # 构建管道: 关节观测 -> 末端执行器观测
+    # Build pipeline to convert joints observation to EE observation
     robot_joints_to_ee_pose_processor = RobotProcessorPipeline[RobotObservation, RobotObservation](
         steps=[
             ForwardKinematicsJointsToEE(
-                kinematics=kinematics_solver,
-                motor_names=list(robot.bus.motors.keys())
+                kinematics=kinematics_solver, motor_names=list(robot.bus.motors.keys())
             )
         ],
         to_transition=observation_to_transition,
         to_output=transition_to_observation,
     )
 
-    # 创建评估数据集
+    # Create the dataset
     dataset = LeRobotDataset.create(
         repo_id=HF_DATASET_ID,
         fps=FPS,
@@ -160,60 +128,36 @@ def main():
         image_writer_threads=4,
     )
 
-    # 构建策略处理器
+    # Build Policy Processors
     preprocessor, postprocessor = make_pre_post_processors(
         policy_cfg=policy,
         pretrained_path=HF_MODEL_ID,
         dataset_stats=dataset.meta.stats,
+        # The inference device is automatically set to match the detected hardware, overriding any previous device settings from training to ensure compatibility.
         preprocessor_overrides={"device_processor": {"device": str(policy.config.device)}},
     )
 
-    # 连接机器人
     robot.connect()
-
-    # 初始化键盘监听和可视化
     listener, events = init_keyboard_listener()
     init_rerun(session_name="phone_so101_evaluate")
 
-    if not robot.is_connected:
-        raise ValueError("Robot is not connected!")
+    try:
+        if not robot.is_connected:
+            raise ValueError("Robot is not connected!")
 
-    print("=" * 60)
-    print("SO101 策略评估已启动")
-    print("=" * 60)
-    print(f"策略: {HF_MODEL_ID}")
-    print(f"评估 {NUM_EPISODES} 个 episode")
-    print("=" * 60)
+        print("Starting evaluate loop...")
+        for episode_idx in range(NUM_EPISODES):
+            log_say(f"Running inference, recording eval episode {episode_idx + 1} of {NUM_EPISODES}")
 
-    for episode_idx in range(NUM_EPISODES):
-        log_say(f"Running inference, recording eval episode {episode_idx + 1} of {NUM_EPISODES}")
-
-        # 主评估循环
-        record_loop(
-            robot=robot,
-            events=events,
-            fps=FPS,
-            policy=policy,
-            preprocessor=preprocessor,
-            postprocessor=postprocessor,
-            dataset=dataset,
-            control_time_s=EPISODE_TIME_SEC,
-            single_task=TASK_DESCRIPTION,
-            display_data=True,
-            teleop_action_processor=make_default_teleop_action_processor(),
-            robot_action_processor=robot_ee_to_joints_processor,
-            robot_observation_processor=robot_joints_to_ee_pose_processor,
-        )
-
-        # 重置环境
-        if not events["stop_recording"] and (
-            (episode_idx < NUM_EPISODES - 1) or events["rerecord_episode"]
-        ):
-            log_say("Reset the environment")
+            # Main record loop
             record_loop(
                 robot=robot,
                 events=events,
                 fps=FPS,
+                policy=policy,
+                preprocessor=preprocessor,
+                postprocessor=postprocessor,
+                dataset=dataset,
                 control_time_s=EPISODE_TIME_SEC,
                 single_task=TASK_DESCRIPTION,
                 display_data=True,
@@ -222,23 +166,40 @@ def main():
                 robot_observation_processor=robot_joints_to_ee_pose_processor,
             )
 
-        if events["rerecord_episode"]:
-            log_say("Re-record episode")
-            events["rerecord_episode"] = False
-            events["exit_early"] = False
-            dataset.clear_episode_buffer()
-            continue
+            # Reset the environment if not stopping or re-recording
+            if not events["stop_recording"] and (
+                (episode_idx < NUM_EPISODES - 1) or events["rerecord_episode"]
+            ):
+                log_say("Reset the environment")
+                record_loop(
+                    robot=robot,
+                    events=events,
+                    fps=FPS,
+                    control_time_s=EPISODE_TIME_SEC,
+                    single_task=TASK_DESCRIPTION,
+                    display_data=True,
+                    teleop_action_processor=make_default_teleop_action_processor(),
+                    robot_action_processor=robot_ee_to_joints_processor,
+                    robot_observation_processor=robot_joints_to_ee_pose_processor,
+                )
 
-        # 保存 episode
-        dataset.save_episode()
+            if events["rerecord_episode"]:
+                log_say("Re-record episode")
+                events["rerecord_episode"] = False
+                events["exit_early"] = False
+                dataset.clear_episode_buffer()
+                continue
 
-    # 清理
-    log_say("Stop recording")
-    robot.disconnect()
-    listener.stop()
+            # Save episode
+            dataset.save_episode()
+    finally:
+        # Clean up
+        log_say("Stop recording")
+        robot.disconnect()
+        listener.stop()
 
-    dataset.finalize()
-    dataset.push_to_hub()
+        dataset.finalize()
+        dataset.push_to_hub()
 
 
 if __name__ == "__main__":

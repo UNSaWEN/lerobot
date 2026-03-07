@@ -14,23 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-SO101 Leader to SO101 Follower Data Recording (End-Effector Space)
-
-使用 SO101 主臂遥操作 SO101 从臂，并录制数据集。
-数据以末端执行器空间记录，用于训练基于末端执行器的策略。
-
-用法:
-    python examples/so101_to_so101_EE/record.py
-
-配置说明:
-    - FOLLOWER_PORT: 从臂串口路径
-    - LEADER_PORT: 主臂串口路径
-    - CAMERA_INDEX: 摄像头索引
-    - NUM_EPISODES: 录制的回合数
-    - HF_REPO_ID: HuggingFace 数据集仓库 ID
-"""
-
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.pipeline_features import aggregate_pipeline_dataset_features, create_initial_features
@@ -55,43 +38,21 @@ from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import log_say
 from lerobot.utils.visualization_utils import init_rerun
 
-# ==================== 配置参数 ====================
-# 串口配置 (根据实际硬件修改)
-FOLLOWER_PORT = "/dev/ttyACM0"  # SO101 从臂串口
-LEADER_PORT = "/dev/ttyACM1"    # SO101 主臂串口
-
-# 机器人 ID
-FOLLOWER_ID = "so101_follower"
-LEADER_ID = "so101_leader"
-
-# URDF 路径
-URDF_PATH = "./SO101/so101_new_calib.urdf"
-
-# 摄像头配置
-CAMERA_INDEX = 0
-CAMERA_WIDTH = 640
-CAMERA_HEIGHT = 480
-
-# 录制参数
 NUM_EPISODES = 2
 FPS = 30
 EPISODE_TIME_SEC = 60
 RESET_TIME_SEC = 30
 TASK_DESCRIPTION = "My task description"
 HF_REPO_ID = "<hf_username>/<dataset_repo_id>"
-
-# 安全限制
-EE_BOUNDS_MIN = [-1.0, -1.0, -1.0]
-EE_BOUNDS_MAX = [1.0, 1.0, 1.0]
-MAX_EE_STEP = 0.10
-# =================================================
+FOLLOWER_PORT = "/dev/ttyACM0"
+LEADER_PORT = "/dev/ttyACM1"
+FOLLOWER_ID = "so101_follower"
+LEADER_ID = "so101_leader"
+URDF_PATH = "./SO101/so101_new_calib.urdf"
 
 
 def main():
-    # Create the robot and teleoperator configurations
-    camera_config = {"front": OpenCVCameraConfig(
-        index_or_path=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT, fps=FPS
-    )}
+    camera_config = {"front": OpenCVCameraConfig(index_or_path=0, width=640, height=480, fps=FPS)}
     follower_config = SO101FollowerConfig(
         port=FOLLOWER_PORT,
         id=FOLLOWER_ID,
@@ -111,7 +72,6 @@ def main():
         target_frame_name="gripper_frame_link",
         joint_names=list(follower.bus.motors.keys()),
     )
-
     leader_kinematics_solver = RobotKinematics(
         urdf_path=URDF_PATH,
         target_frame_name="gripper_frame_link",
@@ -144,8 +104,8 @@ def main():
     ee_to_follower_joints = RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction](
         [
             EEBoundsAndSafety(
-                end_effector_bounds={"min": EE_BOUNDS_MIN, "max": EE_BOUNDS_MAX},
-                max_ee_step_m=MAX_EE_STEP,
+                end_effector_bounds={"min": [-1.0, -1.0, -1.0], "max": [1.0, 1.0, 1.0]},
+                max_ee_step_m=0.10,
             ),
             InverseKinematicsEEToJoints(
                 kinematics=follower_kinematics_solver,
@@ -180,29 +140,22 @@ def main():
         image_writer_threads=4,
     )
 
-    # Connect the robot and teleoperator
     leader.connect()
     follower.connect()
-
-    # Initialize the keyboard listener and rerun visualization
     listener, events = init_keyboard_listener()
-    init_rerun(session_name="so101_recording")
+    init_rerun(session_name="so101_so101_EE_record")
 
-    if not leader.is_connected or not follower.is_connected:
-        raise ValueError("Robot or teleop is not connected!")
+    try:
+        if not leader.is_connected or not follower.is_connected:
+            raise ValueError("Robot or teleop is not connected!")
 
-    print("Starting record loop...")
-    print(f"  Follower: {FOLLOWER_PORT} ({FOLLOWER_ID})")
-    print(f"  Leader: {LEADER_PORT} ({LEADER_ID})")
-    print(f"  Episodes: {NUM_EPISODES}")
-    print(f"  Episode time: {EPISODE_TIME_SEC}s")
+        print("Starting record loop...")
+        episode_idx = 0
+        while episode_idx < NUM_EPISODES and not events["stop_recording"]:
+            log_say(f"Recording episode {episode_idx + 1} of {NUM_EPISODES}")
 
-    episode_idx = 0
-    while episode_idx < NUM_EPISODES and not events["stop_recording"]:
-        log_say(f"Recording episode {episode_idx + 1} of {NUM_EPISODES}")
-
-        # Main record loop
-        record_loop(
+            # Main record loop
+            record_loop(
             robot=follower,
             events=events,
             fps=FPS,
@@ -214,43 +167,45 @@ def main():
             teleop_action_processor=leader_joints_to_ee,
             robot_action_processor=ee_to_follower_joints,
             robot_observation_processor=follower_joints_to_ee,
-        )
-
-        # Reset the environment if not stopping or re-recording
-        if not events["stop_recording"] and (episode_idx < NUM_EPISODES - 1 or events["rerecord_episode"]):
-            log_say("Reset the environment")
-            record_loop(
-                robot=follower,
-                events=events,
-                fps=FPS,
-                teleop=leader,
-                control_time_s=RESET_TIME_SEC,
-                single_task=TASK_DESCRIPTION,
-                display_data=True,
-                teleop_action_processor=leader_joints_to_ee,
-                robot_action_processor=ee_to_follower_joints,
-                robot_observation_processor=follower_joints_to_ee,
             )
 
-        if events["rerecord_episode"]:
-            log_say("Re-recording episode")
-            events["rerecord_episode"] = False
-            events["exit_early"] = False
-            dataset.clear_episode_buffer()
-            continue
+            # Reset the environment if not stopping or re-recording
+            if not events["stop_recording"] and (
+                episode_idx < NUM_EPISODES - 1 or events["rerecord_episode"]
+            ):
+                log_say("Reset the environment")
+                record_loop(
+                    robot=follower,
+                    events=events,
+                    fps=FPS,
+                    teleop=leader,
+                    control_time_s=RESET_TIME_SEC,
+                    single_task=TASK_DESCRIPTION,
+                    display_data=True,
+                    teleop_action_processor=leader_joints_to_ee,
+                    robot_action_processor=ee_to_follower_joints,
+                    robot_observation_processor=follower_joints_to_ee,
+                )
 
-        # Save episode
-        dataset.save_episode()
-        episode_idx += 1
+            if events["rerecord_episode"]:
+                log_say("Re-recording episode")
+                events["rerecord_episode"] = False
+                events["exit_early"] = False
+                dataset.clear_episode_buffer()
+                continue
 
-    # Clean up
-    log_say("Stop recording")
-    leader.disconnect()
-    follower.disconnect()
-    listener.stop()
+            # Save episode
+            dataset.save_episode()
+            episode_idx += 1
+    finally:
+        # Clean up
+        log_say("Stop recording")
+        leader.disconnect()
+        follower.disconnect()
+        listener.stop()
 
-    dataset.finalize()
-    dataset.push_to_hub()
+        dataset.finalize()
+        dataset.push_to_hub()
 
 
 if __name__ == "__main__":
