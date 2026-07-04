@@ -21,6 +21,8 @@ from pathlib import Path
 # Allow importing so101_phone_processor when run from repo root
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from so101_phone_processor import MapPhoneActionToRobotActionSO101
+
 from lerobot.model.kinematics import RobotKinematics
 from lerobot.processor import RobotAction, RobotObservation, RobotProcessorPipeline
 from lerobot.processor.converters import (
@@ -39,8 +41,6 @@ from lerobot.teleoperators.phone.teleop_phone import Phone
 from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
-from so101_phone_processor import MapPhoneActionToRobotActionSO101
-
 # Config: change port, id, and phone_os to match your setup
 ROBOT_PORT = "/dev/ttyACM0"
 ROBOT_ID = "so101_follower"
@@ -55,11 +55,7 @@ GRIPPER_SPEED_FACTOR = 20.0
 
 def main():
     # 创建机器人配置
-    robot_config = SO101FollowerConfig(
-        port=ROBOT_PORT,
-        id=ROBOT_ID,
-        use_degrees=True
-    )
+    robot_config = SO101FollowerConfig(port=ROBOT_PORT, id=ROBOT_ID, use_degrees=True)
 
     # 创建手机遥操作配置
     teleop_config = PhoneConfig(phone_os=PHONE_OS)
@@ -88,7 +84,6 @@ def main():
                 motor_names=list(robot.bus.motors.keys()),
                 use_latched_reference=True,
             ),
-
             EEBoundsAndSafety(
                 end_effector_bounds=EE_BOUNDS,
                 max_ee_step_m=MAX_EE_STEP_M,
