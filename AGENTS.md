@@ -97,8 +97,11 @@ hangs forever. To run the end-to-end `test-*-ete-*` targets, either:
   (`git lfs pull`). Some tests require extra extras or hardware and will skip.
 - Core hello-world flow (train + evaluate a policy in simulation) downloads
   small public datasets from the Hugging Face Hub. Example (CPU):
-  `lerobot-train --policy.type=act --policy.device=cpu --env.type=aloha \
+
+```bash
+lerobot-train --policy.type=act --policy.device=cpu --env.type=aloha \
   --dataset.repo_id=lerobot/aloha_sim_transfer_cube_human --steps=4 \
-  --batch_size=2 --wandb.enable=false --output_dir=tests/outputs/act/`
-  then evaluate the saved checkpoint with `lerobot-eval --policy.path=<ckpt> \
-  --policy.device=cpu --env.type=aloha`.
+  --batch_size=2 --wandb.enable=false --output_dir=tests/outputs/act/
+# then evaluate the saved checkpoint:
+lerobot-eval --policy.path=<ckpt> --policy.device=cpu --env.type=aloha
+```
