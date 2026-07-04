@@ -77,9 +77,7 @@ def main():
     )
 
     # Build pipeline to convert EE action to joints action
-    robot_ee_to_joints_processor = RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ](
+    robot_ee_to_joints_processor = RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction](
         steps=[
             InverseKinematicsEEToJoints(
                 kinematics=kinematics_solver,

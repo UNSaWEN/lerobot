@@ -19,6 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from so101_phone_processor import MapPhoneActionToRobotActionSO101
+
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.pipeline_features import aggregate_pipeline_dataset_features, create_initial_features
@@ -45,8 +47,6 @@ from lerobot.teleoperators.phone.teleop_phone import Phone
 from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import log_say
 from lerobot.utils.visualization_utils import init_rerun
-
-from so101_phone_processor import MapPhoneActionToRobotActionSO101
 
 NUM_EPISODES = 2
 FPS = 30
@@ -104,16 +104,14 @@ def main():
                 end_effector_bounds=EE_BOUNDS,
                 max_ee_step_m=MAX_EE_STEP_M,
             ),
-        GripperVelocityToJoint(speed_factor=20.0),
-    ],
+            GripperVelocityToJoint(speed_factor=20.0),
+        ],
         to_transition=robot_action_observation_to_transition,
         to_output=transition_to_robot_action,
     )
 
     # Build pipeline to convert EE action to joints action
-    robot_ee_to_joints_processor = RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ](
+    robot_ee_to_joints_processor = RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction](
         steps=[
             InverseKinematicsEEToJoints(
                 kinematics=kinematics_solver,
@@ -129,8 +127,7 @@ def main():
     robot_joints_to_ee_pose = RobotProcessorPipeline[RobotObservation, RobotObservation](
         steps=[
             ForwardKinematicsJointsToEE(
-                kinematics=kinematics_solver,
-                motor_names=list(robot.bus.motors.keys())
+                kinematics=kinematics_solver, motor_names=list(robot.bus.motors.keys())
             )
         ],
         to_transition=observation_to_transition,
@@ -176,17 +173,17 @@ def main():
 
             # Main record loop
             record_loop(
-            robot=robot,
-            events=events,
-            fps=FPS,
-            teleop=phone,
-            dataset=dataset,
-            control_time_s=EPISODE_TIME_SEC,
-            single_task=TASK_DESCRIPTION,
-            display_data=True,
-            teleop_action_processor=phone_to_robot_ee_pose_processor,
-            robot_action_processor=robot_ee_to_joints_processor,
-            robot_observation_processor=robot_joints_to_ee_pose,
+                robot=robot,
+                events=events,
+                fps=FPS,
+                teleop=phone,
+                dataset=dataset,
+                control_time_s=EPISODE_TIME_SEC,
+                single_task=TASK_DESCRIPTION,
+                display_data=True,
+                teleop_action_processor=phone_to_robot_ee_pose_processor,
+                robot_action_processor=robot_ee_to_joints_processor,
+                robot_observation_processor=robot_joints_to_ee_pose,
             )
 
             # Reset the environment if not stopping or re-recording

@@ -40,9 +40,7 @@ URDF_PATH = "./SO101/so101_new_calib.urdf"
 
 def main():
     # Initialize the robot config
-    robot_config = SO101FollowerConfig(
-        port=FOLLOWER_PORT, id=FOLLOWER_ID, use_degrees=True
-    )
+    robot_config = SO101FollowerConfig(port=FOLLOWER_PORT, id=FOLLOWER_ID, use_degrees=True)
 
     # Initialize the robot
     robot = SO101Follower(robot_config)
@@ -88,7 +86,8 @@ def main():
 
             # Get recorded action from dataset
             ee_action = {
-                name: float(actions[idx][ACTION][i]) for i, name in enumerate(dataset.features[ACTION]["names"])
+                name: float(actions[idx][ACTION][i])
+                for i, name in enumerate(dataset.features[ACTION]["names"])
             }
 
             # Get robot observation

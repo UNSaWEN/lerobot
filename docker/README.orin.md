@@ -4,13 +4,13 @@
 
 ## 环境要求
 
-| 项目 | 要求 |
-|------|------|
-| 硬件 | Jetson Orin Nano / NX / AGX |
-| JetPack | 6.x (L4T r36.4 推荐) |
-| Docker | 已安装并配置 `nvidia` runtime |
-| 网络 | 构建时需要 `--network=host`（Jetson iptables 限制） |
-| 存储 | 建议将 Docker 数据目录放在 SSD 上 |
+| 项目    | 要求                                                |
+| ------- | --------------------------------------------------- |
+| 硬件    | Jetson Orin Nano / NX / AGX                         |
+| JetPack | 6.x (L4T r36.4 推荐)                                |
+| Docker  | 已安装并配置 `nvidia` runtime                       |
+| 网络    | 构建时需要 `--network=host`（Jetson iptables 限制） |
+| 存储    | 建议将 Docker 数据目录放在 SSD 上                   |
 
 验证 Docker GPU 支持：
 
@@ -21,14 +21,14 @@ docker run --rm --runtime=nvidia dustynv/lerobot:r36.4-cu128-24.04 \
 
 ## 文件说明
 
-| 文件 | 用途 |
-|------|------|
-| `docker/Dockerfile.orin` | Orin 专用镜像构建文件 |
+| 文件                           | 用途                                             |
+| ------------------------------ | ------------------------------------------------ |
+| `docker/Dockerfile.orin`       | Orin 专用镜像构建文件                            |
 | `docker/requirements-orin.txt` | Orin 补装的 Python 依赖（不含 torch/torchcodec） |
-| `docker/run-orin.sh` | 一键构建 + 运行容器（自动映射设备） |
-| `docker/verify-orin.sh` | 容器内验证脚本 |
-| `examples/phone_to_so101/` | 手机遥操作 SO101 样例 |
-| `examples/so101_to_so101_EE/` | 主臂遥操作 SO101 样例 |
+| `docker/run-orin.sh`           | 一键构建 + 运行容器（自动映射设备）              |
+| `docker/verify-orin.sh`        | 容器内验证脚本                                   |
+| `examples/phone_to_so101/`     | 手机遥操作 SO101 样例                            |
+| `examples/so101_to_so101_EE/`  | 主臂遥操作 SO101 样例                            |
 
 ## 构建镜像
 
@@ -156,10 +156,10 @@ sudo usermod -aG dialout $USER
 
 环境变量：
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `LEROBOT_IMAGE` | `lerobot-orin` | 镜像名称 |
-| `LEROBOT_REBUILD` | 未设置 | 设为 `1` 强制重新构建 |
+| 变量              | 默认值         | 说明                  |
+| ----------------- | -------------- | --------------------- |
+| `LEROBOT_IMAGE`   | `lerobot-orin` | 镜像名称              |
+| `LEROBOT_REBUILD` | 未设置         | 设为 `1` 强制重新构建 |
 
 ## 设计说明
 

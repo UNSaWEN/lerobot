@@ -39,9 +39,7 @@ URDF_PATH = "./SO101/so101_new_calib.urdf"
 
 
 def main():
-    robot_config = SO101FollowerConfig(
-        port=ROBOT_PORT, id=ROBOT_ID, use_degrees=True
-    )
+    robot_config = SO101FollowerConfig(port=ROBOT_PORT, id=ROBOT_ID, use_degrees=True)
     robot = SO101Follower(robot_config)
 
     # NOTE: It is highly recommended to use the urdf in the SO-ARM100 repo:
@@ -53,9 +51,7 @@ def main():
     )
 
     # Build pipeline to convert EE action to joints action
-    robot_ee_to_joints_processor = RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ](
+    robot_ee_to_joints_processor = RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction](
         steps=[
             InverseKinematicsEEToJoints(
                 kinematics=kinematics_solver,

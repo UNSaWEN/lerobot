@@ -12,7 +12,6 @@
 
 import argparse
 import logging
-import pickle  # nosec
 import sys
 import threading
 import time
@@ -27,31 +26,33 @@ logger = logging.getLogger("async_test")
 def test_grpc_connectivity(server_address: str) -> bool:
     """阶段1：测试基础 gRPC 连通性（Ready 握手）"""
     import grpc
-    from lerobot.transport import services_pb2, services_pb2_grpc
+    from google.protobuf import empty_pb2
+
+    from lerobot.transport import services_pb2_grpc
     from lerobot.transport.utils import grpc_channel_options
 
-    logger.info(f"="*60)
+    logger.info("=" * 60)
     logger.info(f"阶段1：测试 gRPC 连通性 → {server_address}")
-    logger.info(f"="*60)
+    logger.info("=" * 60)
 
     try:
         channel = grpc.insecure_channel(server_address, grpc_channel_options())
         stub = services_pb2_grpc.AsyncInferenceStub(channel)
 
         start = time.perf_counter()
-        stub.Ready(services_pb2.Empty(), timeout=10)
+        stub.Ready(empty_pb2.Empty(), timeout=10)
         elapsed = time.perf_counter() - start
 
-        logger.info(f"[成功] Ready 握手成功！延迟: {elapsed*1000:.2f}ms")
+        logger.info(f"[成功] Ready 握手成功！延迟: {elapsed * 1000:.2f}ms")
         channel.close()
         return True
 
     except grpc.RpcError as e:
         logger.error(f"[失败] gRPC 连接失败: {e}")
-        logger.error(f"请确认：")
+        logger.error("请确认：")
         logger.error(f"  1. PolicyServer 正在 {server_address} 上运行")
-        logger.error(f"  2. 防火墙允许该端口的流量")
-        logger.error(f"  3. 网络连通（可 ping 试试）")
+        logger.error("  2. 防火墙允许该端口的流量")
+        logger.error("  3. 网络连通（可 ping 试试）")
         return False
 
     except Exception as e:
@@ -59,11 +60,15 @@ def test_grpc_connectivity(server_address: str) -> bool:
         return False
 
 
-def test_full_async_inference(server_address: str, policy_type: str,
-                               pretrained_path: str, policy_device: str,
-                               actions_per_chunk: int, run_duration: float) -> bool:
+def test_full_async_inference(
+    server_address: str,
+    policy_type: str,
+    pretrained_path: str,
+    policy_device: str,
+    actions_per_chunk: int,
+    run_duration: float,
+) -> bool:
     """阶段2+3：测试完整异步推理管线"""
-    import grpc
     from lerobot.async_inference.configs import RobotClientConfig
     from lerobot.async_inference.robot_client import RobotClient
 
@@ -71,9 +76,9 @@ def test_full_async_inference(server_address: str, policy_type: str,
     sys.path.insert(0, ".")
     from tests.mocks.mock_robot import MockRobotConfig
 
-    logger.info(f"="*60)
-    logger.info(f"阶段2：发送 PolicyInstructions（服务器将加载模型）")
-    logger.info(f"="*60)
+    logger.info("=" * 60)
+    logger.info("阶段2：发送 PolicyInstructions（服务器将加载模型）")
+    logger.info("=" * 60)
     logger.info(f"  policy_type:  {policy_type}")
     logger.info(f"  pretrained:   {pretrained_path}")
     logger.info(f"  device:       {policy_device}")
@@ -85,7 +90,7 @@ def test_full_async_inference(server_address: str, policy_type: str,
     client_config = RobotClientConfig(
         server_address=server_address,
         robot=robot_config,
-        chunk_size_threshold=0.0,   # 总是发送观测
+        chunk_size_threshold=0.0,  # 总是发送观测
         policy_type=policy_type,
         pretrained_name_or_path=pretrained_path,
         actions_per_chunk=actions_per_chunk,
@@ -109,12 +114,11 @@ def test_full_async_inference(server_address: str, policy_type: str,
     logger.info("[成功] client.start() 成功！服务器已加载模型。")
 
     # 阶段3：运行异步推理
-    logger.info(f"="*60)
+    logger.info("=" * 60)
     logger.info(f"阶段3：运行完整异步推理管线 ({run_duration}秒)")
-    logger.info(f"="*60)
+    logger.info("=" * 60)
 
     action_chunks_received = {"count": 0}
-    actions_executed = {"count": 0}
 
     # 包装 receive_actions 以计数
     original_aggregate = client._aggregate_action_queues
@@ -124,13 +128,11 @@ def test_full_async_inference(server_address: str, policy_type: str,
         logger.info(f"  收到动作块 #{action_chunks_received['count']}")
         return original_aggregate(*args, **kwargs)
 
-    client._aggregate_action_queues = counting_aggregate
+    client._aggregate_action_queues = counting_aggregate  # type: ignore[method-assign]
 
     # 启动线程
     action_thread = threading.Thread(target=client.receive_actions, daemon=True)
-    control_thread = threading.Thread(
-        target=client.control_loop, args=("测试任务",), daemon=True
-    )
+    control_thread = threading.Thread(target=client.control_loop, args=("测试任务",), daemon=True)
 
     action_thread.start()
     control_thread.start()
@@ -145,9 +147,9 @@ def test_full_async_inference(server_address: str, policy_type: str,
     action_thread.join(timeout=5)
     control_thread.join(timeout=5)
 
-    logger.info(f"="*60)
-    logger.info(f"测试结果")
-    logger.info(f"="*60)
+    logger.info("=" * 60)
+    logger.info("测试结果")
+    logger.info("=" * 60)
     logger.info(f"  收到动作块数: {action_chunks_received['count']}")
     logger.info(f"  动作队列记录: {len(client.action_queue_size)} 条")
 
@@ -167,8 +169,9 @@ def main():
     parser.add_argument("--host", default="192.168.50.3", help="PolicyServer 主机地址")
     parser.add_argument("--port", type=int, default=8080, help="PolicyServer 端口")
     parser.add_argument(
-        "--connectivity-only", action="store_true",
-        help="仅测试 gRPC 连通性（不发送 PolicyInstructions 和推理）"
+        "--connectivity-only",
+        action="store_true",
+        help="仅测试 gRPC 连通性（不发送 PolicyInstructions 和推理）",
     )
     parser.add_argument("--policy-type", default="act", help="策略类型 (act, smolvla, diffusion, pi0...)")
     parser.add_argument("--pretrained-path", default="", help="预训练模型路径或 HuggingFace 名称")

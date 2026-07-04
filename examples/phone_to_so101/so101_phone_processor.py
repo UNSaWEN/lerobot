@@ -113,9 +113,9 @@ class MapPhoneActionToRobotActionSO101(RobotActionProcessorStep):
         #
         # 注意: 以下映射基于 SO101 URDF 分析，可能需要根据实际测试微调
         action["enabled"] = enabled
-        action["target_x"] = pos[1] if enabled else 0.0    # 手机 Y → 机械臂 X (前后)
-        action["target_y"] = -pos[0] if enabled else 0.0   # 手机 X → 机械臂 -Y (左右反转)
-        action["target_z"] = pos[2] if enabled else 0.0    # 手机 Z → 机械臂 Z (上下)
+        action["target_x"] = pos[1] if enabled else 0.0  # 手机 Y → 机械臂 X (前后)
+        action["target_y"] = -pos[0] if enabled else 0.0  # 手机 X → 机械臂 -Y (左右反转)
+        action["target_z"] = pos[2] if enabled else 0.0  # 手机 Z → 机械臂 Z (上下)
         action["target_wx"] = rotvec[1] if enabled else 0.0
         action["target_wy"] = -rotvec[0] if enabled else 0.0
         action["target_wz"] = rotvec[2] if enabled else 0.0

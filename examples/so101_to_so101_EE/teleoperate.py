@@ -43,9 +43,7 @@ URDF_PATH = "./SO101/so101_new_calib.urdf"
 
 def main():
     # Initialize the robot and teleoperator config
-    follower_config = SO101FollowerConfig(
-        port=FOLLOWER_PORT, id=FOLLOWER_ID, use_degrees=True
-    )
+    follower_config = SO101FollowerConfig(port=FOLLOWER_PORT, id=FOLLOWER_ID, use_degrees=True)
     leader_config = SO101LeaderConfig(port=LEADER_PORT, id=LEADER_ID)
 
     # Initialize the robot and teleoperator

@@ -156,17 +156,17 @@ def main():
 
             # Main record loop
             record_loop(
-            robot=follower,
-            events=events,
-            fps=FPS,
-            teleop=leader,
-            dataset=dataset,
-            control_time_s=EPISODE_TIME_SEC,
-            single_task=TASK_DESCRIPTION,
-            display_data=True,
-            teleop_action_processor=leader_joints_to_ee,
-            robot_action_processor=ee_to_follower_joints,
-            robot_observation_processor=follower_joints_to_ee,
+                robot=follower,
+                events=events,
+                fps=FPS,
+                teleop=leader,
+                dataset=dataset,
+                control_time_s=EPISODE_TIME_SEC,
+                single_task=TASK_DESCRIPTION,
+                display_data=True,
+                teleop_action_processor=leader_joints_to_ee,
+                robot_action_processor=ee_to_follower_joints,
+                robot_observation_processor=follower_joints_to_ee,
             )
 
             # Reset the environment if not stopping or re-recording
