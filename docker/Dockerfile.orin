@@ -1,6 +1,6 @@
 # Copyright 2025 UNSaWEN. All rights reserved.
 #
-# LeRobot Dockerfile for NVIDIA Orin (JetPack 6 / L4T r36.4.0)
+# LeRobot Dockerfile for NVIDIA Orin (JetPack 6 / L4T r36.4)
 # 基于 dustynv/lerobot 镜像，安装 lerobot v0.5.2 源码 + 自定义 SO101 样例
 #
 # 构建:
@@ -16,7 +16,7 @@
 # - CUDA 12.8
 # - PyTorch (Jetson 优化版, 通常 2.7–2.8)
 # - 系统级依赖 (OpenCV, ffmpeg 等)
-FROM dustynv/lerobot:r36.4.0-cu128-24.04
+FROM dustynv/lerobot:r36.4-cu128-24.04
 
 WORKDIR /opt/lerobot
 

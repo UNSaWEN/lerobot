@@ -7,7 +7,7 @@
 | 项目 | 要求 |
 |------|------|
 | 硬件 | Jetson Orin Nano / NX / AGX |
-| JetPack | 6.x (L4T r36.4.0 推荐) |
+| JetPack | 6.x (L4T r36.4 推荐) |
 | Docker | 已安装并配置 `nvidia` runtime |
 | 网络 | 构建时需要 `--network=host`（Jetson iptables 限制） |
 | 存储 | 建议将 Docker 数据目录放在 SSD 上 |
@@ -15,7 +15,7 @@
 验证 Docker GPU 支持：
 
 ```bash
-docker run --rm --runtime=nvidia dustynv/lerobot:r36.4.0-cu128-24.04 \
+docker run --rm --runtime=nvidia dustynv/lerobot:r36.4-cu128-24.04 \
   python3 -c "import torch; print(torch.cuda.is_available())"
 ```
 
