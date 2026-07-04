@@ -52,6 +52,15 @@ if [ -n "$DISPLAY" ]; then
     xhost +local:docker 2>/dev/null || true
 fi
 
+# SO101 资源目录（遥操作需要 URDF）
+SO101_DIR="$REPO_ROOT/SO101"
+SO101_MOUNT=""
+if [ -d "$SO101_DIR" ]; then
+    SO101_MOUNT="-v $SO101_DIR:/opt/lerobot/SO101"
+else
+    echo "警告: $SO101_DIR 不存在，跳过 SO101 挂载（遥操作前请准备 URDF 文件）"
+fi
+
 # 运行容器
 echo "启动 LeRobot 容器..."
 docker run -it --rm \
@@ -59,7 +68,7 @@ docker run -it --rm \
     --network=host \
     $DEVICE_ARGS \
     $DISPLAY_ARGS \
-    -v "$REPO_ROOT/SO101:/opt/lerobot/SO101" \
+    $SO101_MOUNT \
     -v "${HOME}/.cache/huggingface:/data/models/huggingface" \
     -v "${HOME}/.cache/lerobot:/root/.cache/lerobot" \
     -w /opt/lerobot \

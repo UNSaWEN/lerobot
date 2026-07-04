@@ -65,8 +65,8 @@ RUN sed -i '/^\[tool\.setuptools\.packages\.find\]/i \
 
 # 剥离基础镜像已提供的包，避免 pip 从 PyPI 拉取不兼容的 aarch64 wheel
 RUN sed -i \
-    -e '/"torch[^"]*",/d' \
-    -e '/"torchvision[^"]*",/d' \
+    -e '/"torch>=/d' \
+    -e '/"torchvision>=/d' \
     -e '/"opencv-python[^"]*",/d' \
     -e '/torchcodec/d' \
     pyproject.toml

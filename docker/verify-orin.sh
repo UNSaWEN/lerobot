@@ -20,8 +20,12 @@ section() {
 }
 
 section "1. 基础环境"
-python3 --version || fail "python3 不可用"
-ok "python3 可用"
+if python3 --version >/dev/null 2>&1; then
+    python3 --version
+    ok "python3 可用"
+else
+    fail "python3 不可用"
+fi
 
 section "2. GPU / CUDA"
 python3 - <<'PY'

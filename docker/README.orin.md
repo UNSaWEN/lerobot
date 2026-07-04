@@ -188,8 +188,8 @@ v0.5.2 将 `rerun-sdk`、`datasets`、`pynput`、`placo` 等从核心依赖拆�
 确认 Dockerfile 中的 `sed` 步骤成功剥离了 `torch` 行。手动检查：
 
 ```bash
-docker run --rm lerobot-orin grep -n '"torch' /opt/lerobot/pyproject.toml
-# 应无输出
+docker run --rm lerobot-orin grep -nE '"torch>=|"torchvision>=' /opt/lerobot/pyproject.toml
+# 应无输出（torchdiffeq / torchcodec 等其它依赖保留）
 ```
 
 ### CUDA not available
@@ -198,8 +198,9 @@ docker run --rm lerobot-orin grep -n '"torch' /opt/lerobot/pyproject.toml
 # 检查 nvidia runtime
 docker info | grep -i runtime
 
-# 确认使用 --runtime=nvidia
-docker run --rm --runtime=nvidia lerobot-orin nvidia-smi
+# 在容器内验证 GPU（Jetson 通常没有 nvidia-smi）
+docker run --rm --runtime=nvidia --network=host lerobot-orin \
+  python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
 ### 串口找不到
